@@ -12,23 +12,24 @@ public enum BoidAction
 public class Boid : MonoBehaviour
 {
     [Header("Movimiento")]
+    public float minSpeed = 2f;
     public float maxSpeed = 5f;
-    public float maxForce = 10f;
+    public float maxForce = 12f;
 
     [Header("Flocking")]
     public float separationRadius = 1.5f;
     public float alignmentRadius = 3f;
     public float cohesionRadius = 4f;
     public float separationWeight = 1.5f;
-    public float alignmentWeight = 1f;
-    public float cohesionWeight = 1f;
+    public float alignmentWeight = 1.5f;
+    public float cohesionWeight = 0.8f;
 
     [Header("Detección")]
-    public float foodDetectionRadius = 5f;
+    public float foodDetectionRadius = 6f;
     public float hunterVisionRadius = 6f;
     public LayerMask foodLayer;
     public LayerMask hunterLayer;
-    public float eatDistance = 0.5f;
+    public float eatDistance = 1.2f;
 
     [Header("Wander")]
     public float wanderJitter = 2f;
@@ -44,15 +45,14 @@ public class Boid : MonoBehaviour
     private Transform hunter;
     private BoidAction currentAction;
     private Vector3 wanderTarget;
-    private float autoHeightOffset; // Calculado automáticamente según la malla del objeto
+    private float autoHeightOffset;
 
     void Start()
     {
-        velocity = transform.forward * (maxSpeed * 0.5f);
+        velocity = transform.forward * maxSpeed;
         if (FlockManager.Instance != null)
             FlockManager.Instance.Register(this);
 
-        // Auto-detectar la distancia del pivote a la base del modelo 3D para pisar el suelo
         Renderer rend = GetComponentInChildren<Renderer>();
         if (rend != null)
             autoHeightOffset = transform.position.y - rend.bounds.min.y;
@@ -105,11 +105,24 @@ public class Boid : MonoBehaviour
 
         Vector3 currentVel = velocity + steering * Time.deltaTime;
         currentVel.y = 0f;
-        velocity = Vector3.ClampMagnitude(currentVel, maxSpeed);
 
+        // Desactivamos minSpeed si está buscando comida para que Arrive pueda desacelerar
+        float effectiveMinSpeed = (currentAction == BoidAction.SeekFood) ? 0f : minSpeed;
+
+        float speed = currentVel.magnitude;
+        if (speed < effectiveMinSpeed)
+        {
+            Vector3 dir = (speed > 0.001f) ? currentVel.normalized : transform.forward;
+            currentVel = dir * effectiveMinSpeed;
+        }
+        else if (speed > maxSpeed)
+        {
+            currentVel = currentVel.normalized * maxSpeed;
+        }
+
+        velocity = currentVel;
         transform.position += velocity * Time.deltaTime;
 
-        // Se apoya exactamente sobre la superficie definida por WorldBounds
         if (WorldBounds.Instance != null)
             transform.position = WorldBounds.Instance.ClampToArea(transform.position, autoHeightOffset);
 
@@ -122,7 +135,18 @@ public class Boid : MonoBehaviour
 
     private void DetectEnvironment()
     {
-        targetFood = FindClosest(foodDetectionRadius, foodLayer);
+        // Mantiene la comida actual si sigue existiendo y en rango
+        if (targetFood == null || !targetFood.gameObject.activeInHierarchy)
+        {
+            targetFood = FindClosest(foodDetectionRadius, foodLayer);
+        }
+        else
+        {
+            float dist = Vector3.Distance(transform.position, targetFood.position);
+            if (dist > foodDetectionRadius * 1.2f)
+                targetFood = null;
+        }
+
         hunter = FindClosest(hunterVisionRadius, hunterLayer);
     }
 
@@ -160,14 +184,27 @@ public class Boid : MonoBehaviour
 
     private Vector3 ExecuteSeekFood()
     {
-        Vector3 steer = SteeringBehaviors.Arrive(transform.position, velocity, targetFood.position, maxSpeed, maxForce, foodDetectionRadius);
+        if (targetFood == null) return Vector3.zero;
 
-        if (Vector3.Distance(transform.position, targetFood.position) < eatDistance)
+        Vector3 steer = SteeringBehaviors.Arrive(
+            transform.position,
+            velocity,
+            targetFood.position,
+            maxSpeed,
+            maxForce * 1.5f,
+            foodDetectionRadius
+        );
+
+        Vector3 diff = targetFood.position - transform.position;
+        diff.y = 0f;
+
+        if (diff.magnitude <= eatDistance)
         {
             Food food = targetFood.GetComponent<Food>();
             if (food != null) food.Consume();
             targetFood = null;
         }
+
         return steer;
     }
 
@@ -194,7 +231,8 @@ public class Boid : MonoBehaviour
 
             if (d < separationRadius && d > 0.001f)
             {
-                separation += (transform.position - other.transform.position).normalized / d;
+                float safeDist = Mathf.Max(d, 0.2f);
+                separation += (transform.position - other.transform.position).normalized / safeDist;
                 sepCount++;
             }
 
@@ -232,6 +270,8 @@ public class Boid : MonoBehaviour
             cohesion /= cohCount;
             steering += SteeringBehaviors.Seek(transform.position, velocity, cohesion, maxSpeed, maxForce) * cohesionWeight;
         }
+
+        steering += new Vector3(Random.Range(-0.2f, 0.2f), 0f, Random.Range(-0.2f, 0.2f));
 
         return steering;
     }

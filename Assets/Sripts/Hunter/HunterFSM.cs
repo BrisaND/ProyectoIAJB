@@ -140,6 +140,10 @@ public class HunterFSM : MonoBehaviour
         return closest;
     }
 
+    public string CurrentStateName => stateMachine?.CurrentState != null
+    ? stateMachine.CurrentState.GetType().Name.Replace("State", "")
+    : "Ninguno";
+
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;

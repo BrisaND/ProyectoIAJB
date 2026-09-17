@@ -1,11 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// El cazador recorre los waypoints en orden. Al llegar al último,
-/// vuelve al primero (loop) o invierte el sentido (ping-pong), según
-/// hunter.pingPong. Gasta energía; si llega a 0 pasa a Idle. Si detecta
-/// un boid en su rango de visión, pasa a Hunting.
-/// </summary>
 public class PatrolState : IState
 {
     private readonly HunterFSM hunter;
@@ -17,11 +11,7 @@ public class PatrolState : IState
         this.hunter = hunter;
     }
 
-    public void Enter()
-    {
-        // No reseteamos currentIndex: el cazador retoma la patrulla
-        // desde donde la dejó la última vez.
-    }
+    public void Enter() { }
 
     public void Execute()
     {
@@ -29,10 +19,19 @@ public class PatrolState : IState
             return;
 
         Transform target = hunter.waypoints[currentIndex];
-        hunter.MoveTo(target.position);
+
+        // Moverse hacia el objetivo manteniendo la misma altura del cazador
+        Vector3 targetPos = target.position;
+        targetPos.y = hunter.transform.position.y;
+
+        hunter.MoveTo(targetPos);
         hunter.DrainEnergy(hunter.energyDrainPatrol);
 
-        if (Vector3.Distance(hunter.transform.position, target.position) < hunter.waypointThreshold)
+        // Cálculo de distancia ignorando el eje Y
+        Vector3 hunterXZ = new Vector3(hunter.transform.position.x, 0f, hunter.transform.position.z);
+        Vector3 targetXZ = new Vector3(target.position.x, 0f, target.position.z);
+
+        if (Vector3.Distance(hunterXZ, targetXZ) < hunter.waypointThreshold)
             AdvanceWaypoint();
 
         if (hunter.CurrentEnergy <= 0f)
@@ -53,6 +52,8 @@ public class PatrolState : IState
 
     private void AdvanceWaypoint()
     {
+        if (hunter.waypoints.Length <= 1) return;
+
         if (hunter.pingPong)
         {
             if (currentIndex + direction >= hunter.waypoints.Length || currentIndex + direction < 0)

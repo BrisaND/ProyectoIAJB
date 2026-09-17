@@ -1,14 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Contexto del NPC Cazador. Contiene todos los datos compartidos entre estados
-/// (energía, waypoints, rango de visión) y los métodos de movimiento/detección
-/// que los estados usan. La FSM en sí (StateMachine) vive acá, pero cada
-/// IState decide sus propias transiciones.
-///
-/// Sin bala/disparo: en Hunting el cazador persigue con Pursuit y "atrapa"
-/// al boid por contacto (distancia < catchDistance).
-/// </summary>
 public class HunterFSM : MonoBehaviour
 {
     [Header("Movimiento")]
@@ -17,37 +8,35 @@ public class HunterFSM : MonoBehaviour
 
     [Header("Energía")]
     public float maxEnergy = 100f;
-    public float energyDrainPatrol = 5f;   // por segundo, mientras patrulla
-    public float energyDrainHunting = 10f; // por segundo, mientras persigue
-    public float restDuration = 4f;        // segundos mínimos de descanso en Idle
-    public float energyRecoverRate = 20f;  // por segundo, mientras descansa
+    public float energyDrainPatrol = 5f;
+    public float energyDrainHunting = 10f;
+    public float restDuration = 4f;
+    public float energyRecoverRate = 20f;
 
     [Header("Patrulla")]
     public Transform[] waypoints;
-    public bool pingPong = true; // true: va y vuelve. false: vuelve al primero (loop).
+    public bool pingPong = true;
     public float waypointThreshold = 0.5f;
 
     [Header("Caza")]
     public float visionRadius = 8f;
-    public float loseSightMultiplier = 1.3f; // margen para "perder de vista" (histéresis)
+    public float loseSightMultiplier = 1.3f;
     public float catchDistance = 1f;
     public LayerMask boidLayer;
 
     [Header("Límite de área (piso)")]
     public float containWeight = 3f;
-    [Tooltip("Altura sobre la superficie del piso. Dejalo en 0 si este objeto es un pivote vacío y el modelo visual es un hijo desplazado hacia arriba.")]
-    public float heightOffset = 0f;
 
     public float CurrentEnergy { get; private set; }
     public Vector3 Velocity { get; private set; }
     public Transform CurrentTarget { get; set; }
 
-    // Estados expuestos para que cada IState pueda pedirle a la FSM cambiar a otro.
     public IdleState idleState;
     public PatrolState patrolState;
     public HuntingState huntingState;
 
     private StateMachine stateMachine;
+    private float autoHeightOffset;
 
     void Awake()
     {
@@ -61,6 +50,11 @@ public class HunterFSM : MonoBehaviour
 
     void Start()
     {
+        // Auto-detectar la distancia del pivote a la base del modelo 3D
+        Renderer rend = GetComponentInChildren<Renderer>();
+        if (rend != null)
+            autoHeightOffset = transform.position.y - rend.bounds.min.y;
+
         stateMachine.ChangeState(patrolState);
     }
 
@@ -74,18 +68,12 @@ public class HunterFSM : MonoBehaviour
         stateMachine.ChangeState(newState);
     }
 
-    // ---------------------------------------------------------------
-    // MOVIMIENTO
-    // ---------------------------------------------------------------
-
-    /// <summary>Movimiento simple hacia un punto fijo (usado en Patrol).</summary>
     public void MoveTo(Vector3 target)
     {
         Vector3 steering = SteeringBehaviors.Seek(transform.position, Velocity, target, maxSpeed, maxForce);
         ApplyMovement(steering);
     }
 
-    /// <summary>Persecución con predicción de posición futura (usado en Hunting).</summary>
     public void PursuitTarget(Transform target)
     {
         Vector3 targetVelocity = Vector3.zero;
@@ -103,14 +91,14 @@ public class HunterFSM : MonoBehaviour
         if (WorldBounds.Instance != null)
             steering += WorldBounds.Instance.Contain(transform.position, Velocity, maxSpeed, maxForce) * containWeight;
 
-        Vector3 newVel = Velocity + steering * Time.deltaTime;
-        newVel.y = 0f;
-        Velocity = Vector3.ClampMagnitude(newVel, maxSpeed);
+        Vector3 currentVel = Velocity + steering * Time.deltaTime;
+        currentVel.y = 0f;
+        Velocity = Vector3.ClampMagnitude(currentVel, maxSpeed);
 
         transform.position += Velocity * Time.deltaTime;
 
         if (WorldBounds.Instance != null)
-            transform.position = WorldBounds.Instance.ClampToArea(transform.position, heightOffset);
+            transform.position = WorldBounds.Instance.ClampToArea(transform.position, autoHeightOffset);
 
         if (Velocity.sqrMagnitude > 0.01f)
         {
@@ -124,10 +112,6 @@ public class HunterFSM : MonoBehaviour
         Velocity = Vector3.zero;
     }
 
-    // ---------------------------------------------------------------
-    // ENERGÍA
-    // ---------------------------------------------------------------
-
     public void DrainEnergy(float ratePerSecond)
     {
         CurrentEnergy = Mathf.Max(0f, CurrentEnergy - ratePerSecond * Time.deltaTime);
@@ -137,10 +121,6 @@ public class HunterFSM : MonoBehaviour
     {
         CurrentEnergy = Mathf.Min(maxEnergy, CurrentEnergy + energyRecoverRate * Time.deltaTime);
     }
-
-    // ---------------------------------------------------------------
-    // DETECCIÓN
-    // ---------------------------------------------------------------
 
     public Transform DetectClosestBoid()
     {

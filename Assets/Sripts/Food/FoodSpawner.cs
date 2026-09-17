@@ -46,6 +46,14 @@ public class FoodSpawner : MonoBehaviour
             0f,
             Random.Range(-areaSize.z / 2f, areaSize.z / 2f));
 
+        if (WorldBounds.Instance != null)
+        {
+            pos.y = WorldBounds.Instance.FixedHeight;
+            Renderer rend = foodPrefab.GetComponentInChildren<Renderer>();
+            if (rend != null)
+                pos.y += rend.bounds.extents.y;
+        }
+
         GameObject food = Instantiate(foodPrefab, pos, Quaternion.identity);
         activeFood.Add(food);
     }

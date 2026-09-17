@@ -1,8 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Las 4 acciones posibles que puede elegir el Decision Tree de un boid.
-/// </summary>
 public enum BoidAction
 {
     SeekFood,
@@ -11,15 +8,6 @@ public enum BoidAction
     Wander
 }
 
-/// <summary>
-/// Agente autónomo (boid). Se mueve SIN Rigidbody: la posición se actualiza
-/// a mano en Update() usando la velocity calculada por los Steering Behaviors.
-///
-/// Cada frame:
-///   1) Detecta el entorno (comida cercana, cazador en rango, vecinos).
-///   2) El Decision Tree (DecideAction) elige UNA acción según prioridad.
-///   3) Se aplica el Steering Behavior correspondiente a esa acción.
-/// </summary>
 [DisallowMultipleComponent]
 public class Boid : MonoBehaviour
 {
@@ -42,24 +30,21 @@ public class Boid : MonoBehaviour
     public LayerMask hunterLayer;
     public float eatDistance = 0.5f;
 
-    [Header("Wander (sin comida, sin cazador, sin vecinos)")]
+    [Header("Wander")]
     public float wanderJitter = 2f;
     public float wanderRadius = 2f;
     public float wanderDistance = 3f;
 
     [Header("Límite de área (piso)")]
-    [Tooltip("Peso extra para el steering que lo mantiene dentro del área definida por WorldBounds.")]
     public float containWeight = 3f;
-    [Tooltip("Altura sobre la superficie del piso. Dejalo en 0 si este objeto es un pivote vacío y el modelo visual es un hijo desplazado hacia arriba.")]
-    public float heightOffset = 0f;
 
-    // Velocidad actual, expuesta para que el Hunter pueda predecir la posición futura (Pursuit).
     public Vector3 velocity { get; private set; }
 
     private Transform targetFood;
     private Transform hunter;
     private BoidAction currentAction;
     private Vector3 wanderTarget;
+    private float autoHeightOffset; // Calculado automáticamente según la malla del objeto
 
     void Start()
     {
@@ -67,7 +52,11 @@ public class Boid : MonoBehaviour
         if (FlockManager.Instance != null)
             FlockManager.Instance.Register(this);
 
-        // Punto inicial de wander, en un círculo alrededor del boid.
+        // Auto-detectar la distancia del pivote a la base del modelo 3D para pisar el suelo
+        Renderer rend = GetComponentInChildren<Renderer>();
+        if (rend != null)
+            autoHeightOffset = transform.position.y - rend.bounds.min.y;
+
         wanderTarget = Random.insideUnitSphere * wanderRadius;
         wanderTarget.y = 0f;
     }
@@ -104,8 +93,6 @@ public class Boid : MonoBehaviour
                 break;
         }
 
-        // El límite del área tiene prioridad sobre cualquier otra acción:
-        // se suma siempre, incluso mientras persigue comida o escapa del cazador.
         if (WorldBounds.Instance != null)
             steering += WorldBounds.Instance.Contain(transform.position, velocity, maxSpeed, maxForce) * containWeight;
 
@@ -114,18 +101,17 @@ public class Boid : MonoBehaviour
 
     private void ApplyMovement(Vector3 steering)
     {
-        steering.y = 0f; // Anula la fuerza vertical
+        steering.y = 0f;
 
-        // Usamos una variable local para modificar componentes de Vector3
         Vector3 currentVel = velocity + steering * Time.deltaTime;
-        currentVel.y = 0f; // Mantiene el movimiento horizontal
+        currentVel.y = 0f;
         velocity = Vector3.ClampMagnitude(currentVel, maxSpeed);
 
         transform.position += velocity * Time.deltaTime;
 
-        // Red de seguridad dentro de los límites del mapa
+        // Se apoya exactamente sobre la superficie definida por WorldBounds
         if (WorldBounds.Instance != null)
-            transform.position = WorldBounds.Instance.ClampToArea(transform.position, heightOffset);
+            transform.position = WorldBounds.Instance.ClampToArea(transform.position, autoHeightOffset);
 
         if (velocity.sqrMagnitude > 0.01f)
         {
@@ -133,10 +119,6 @@ public class Boid : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
         }
     }
-
-    // ---------------------------------------------------------------
-    // DETECCIÓN DEL ENTORNO
-    // ---------------------------------------------------------------
 
     private void DetectEnvironment()
     {
@@ -162,18 +144,6 @@ public class Boid : MonoBehaviour
         return closest;
     }
 
-    // ---------------------------------------------------------------
-    // DECISION TREE
-    //
-    //  ¿Hay comida cerca?
-    //      SI  -> SeekFood (Arrive)
-    //      NO  -> ¿Hay cazador en rango de visión?
-    //              SI  -> EvadeHunter (Evade)
-    //              NO  -> ¿Hay otros boids cerca?
-    //                      SI  -> Flock (Separación + Alineación + Cohesión)
-    //                      NO  -> Wander (movimiento aleatorio)
-    // ---------------------------------------------------------------
-
     private BoidAction DecideAction()
     {
         if (targetFood != null)
@@ -187,10 +157,6 @@ public class Boid : MonoBehaviour
 
         return BoidAction.Wander;
     }
-
-    // ---------------------------------------------------------------
-    // EJECUCIÓN DE CADA ACCIÓN
-    // ---------------------------------------------------------------
 
     private Vector3 ExecuteSeekFood()
     {
@@ -226,21 +192,18 @@ public class Boid : MonoBehaviour
             if (other == this) continue;
             float d = Vector3.Distance(transform.position, other.transform.position);
 
-            // Separación: alejarse de vecinos muy cercanos.
             if (d < separationRadius && d > 0.001f)
             {
                 separation += (transform.position - other.transform.position).normalized / d;
                 sepCount++;
             }
 
-            // Alineación: promediar la dirección de vecinos cercanos.
             if (d < alignmentRadius)
             {
                 alignment += other.velocity;
                 aliCount++;
             }
 
-            // Cohesión: acercarse al centro de masa de los vecinos.
             if (d < cohesionRadius)
             {
                 cohesion += other.transform.position;
@@ -275,7 +238,6 @@ public class Boid : MonoBehaviour
 
     private Vector3 ExecuteWander()
     {
-        // Pequeño offset aleatorio sobre un círculo proyectado adelante del boid.
         wanderTarget += new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f)) * wanderJitter * Time.deltaTime;
         wanderTarget = wanderTarget.normalized * wanderRadius;
 

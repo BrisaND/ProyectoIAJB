@@ -53,7 +53,7 @@ public class HuntingState : IState
         if (hunter.CurrentEnergy <= 0f)
         {
             hunter.CurrentTarget = null;
-            hunter.ChangeState(hunter.idleState);
+            hunter.ChangeState(hunter.restState);
         }
     }
 

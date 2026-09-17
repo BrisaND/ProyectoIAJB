@@ -10,8 +10,8 @@ public class HunterUI : MonoBehaviour
     {
         if (hunter == null || statusText == null) return;
 
-        statusText.text = $"<b>CAZADOR</b>\n" +
-                          $"Estado: {hunter.CurrentStateName}\n" +
-                          $"Energía: {Mathf.CeilToInt(hunter.CurrentEnergy)} / {hunter.maxEnergy}";
+        statusText.text = $"<b>HUNTER</b>\n" +
+                          $"State: {hunter.CurrentStateName}\n" +
+                          $"Energy: {Mathf.CeilToInt(hunter.CurrentEnergy)} / {hunter.maxEnergy}";
     }
 }

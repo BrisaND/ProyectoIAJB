@@ -31,29 +31,35 @@ public class HunterFSM : MonoBehaviour
     public Vector3 Velocity { get; private set; }
     public Transform CurrentTarget { get; set; }
 
-    public IdleState idleState;
+    public RestState restState;
     public PatrolState patrolState;
     public HuntingState huntingState;
 
     private StateMachine stateMachine;
     private float autoHeightOffset;
+    public Vector3 LastPatrolPoint { get; set; }
 
     void Awake()
     {
         CurrentEnergy = maxEnergy;
         stateMachine = new StateMachine();
 
-        idleState = new IdleState(this);
+        restState = new RestState(this);
         patrolState = new PatrolState(this);
         huntingState = new HuntingState(this);
     }
 
     void Start()
     {
-        // Auto-detectar la distancia del pivote a la base del modelo 3D
         Renderer rend = GetComponentInChildren<Renderer>();
         if (rend != null)
             autoHeightOffset = transform.position.y - rend.bounds.min.y;
+
+        // Inicializa la posición del último punto de patrulla
+        if (waypoints != null && waypoints.Length > 0 && waypoints[0] != null)
+            LastPatrolPoint = waypoints[0].position;
+        else
+            LastPatrolPoint = transform.position;
 
         stateMachine.ChangeState(patrolState);
     }

@@ -19,15 +19,14 @@ public class PatrolState : IState
             return;
 
         Transform target = hunter.waypoints[currentIndex];
+        hunter.LastPatrolPoint = target.position; // Guardar el último punto visitado/objetivo
 
-        // Moverse hacia el objetivo manteniendo la misma altura del cazador
         Vector3 targetPos = target.position;
         targetPos.y = hunter.transform.position.y;
 
         hunter.MoveTo(targetPos);
         hunter.DrainEnergy(hunter.energyDrainPatrol);
 
-        // Cálculo de distancia ignorando el eje Y
         Vector3 hunterXZ = new Vector3(hunter.transform.position.x, 0f, hunter.transform.position.z);
         Vector3 targetXZ = new Vector3(target.position.x, 0f, target.position.z);
 
@@ -36,7 +35,7 @@ public class PatrolState : IState
 
         if (hunter.CurrentEnergy <= 0f)
         {
-            hunter.ChangeState(hunter.idleState);
+            hunter.ChangeState(hunter.restState); // Cambiado a restState
             return;
         }
 

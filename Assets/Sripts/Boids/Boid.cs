@@ -114,15 +114,24 @@ public class Boid : MonoBehaviour
 
     private void ApplyMovement(Vector3 steering)
     {
-        velocity = Vector3.ClampMagnitude(velocity + steering * Time.deltaTime, maxSpeed);
+        steering.y = 0f; // Anula la fuerza vertical
+
+        // Usamos una variable local para modificar componentes de Vector3
+        Vector3 currentVel = velocity + steering * Time.deltaTime;
+        currentVel.y = 0f; // Mantiene el movimiento horizontal
+        velocity = Vector3.ClampMagnitude(currentVel, maxSpeed);
+
         transform.position += velocity * Time.deltaTime;
 
-        // Red de seguridad: nunca se escapa del área, aunque el steering no alcance a corregir a tiempo.
+        // Red de seguridad dentro de los límites del mapa
         if (WorldBounds.Instance != null)
             transform.position = WorldBounds.Instance.ClampToArea(transform.position, heightOffset);
 
         if (velocity.sqrMagnitude > 0.01f)
-            transform.forward = Vector3.Lerp(transform.forward, velocity.normalized, 10f * Time.deltaTime);
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(velocity.normalized, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
+        }
     }
 
     // ---------------------------------------------------------------

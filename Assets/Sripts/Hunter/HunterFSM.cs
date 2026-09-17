@@ -98,18 +98,25 @@ public class HunterFSM : MonoBehaviour
 
     private void ApplyMovement(Vector3 steering)
     {
+        steering.y = 0f;
+
         if (WorldBounds.Instance != null)
             steering += WorldBounds.Instance.Contain(transform.position, Velocity, maxSpeed, maxForce) * containWeight;
 
-        Velocity = Vector3.ClampMagnitude(Velocity + steering * Time.deltaTime, maxSpeed);
+        Vector3 newVel = Velocity + steering * Time.deltaTime;
+        newVel.y = 0f;
+        Velocity = Vector3.ClampMagnitude(newVel, maxSpeed);
+
         transform.position += Velocity * Time.deltaTime;
 
-        // Red de seguridad: nunca se escapa del área.
         if (WorldBounds.Instance != null)
             transform.position = WorldBounds.Instance.ClampToArea(transform.position, heightOffset);
 
         if (Velocity.sqrMagnitude > 0.01f)
-            transform.forward = Vector3.Lerp(transform.forward, Velocity.normalized, 10f * Time.deltaTime);
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(Velocity.normalized, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
+        }
     }
 
     public void Stop()
